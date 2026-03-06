@@ -22,4 +22,8 @@ O fluxo de dados segue o padrão **Bronze ➔ Silver ➔ Gold**, garantindo rast
 * **Automação Web:** Playwright
 * **Processamento de Dados:** Pandas, PyArrow
 * **Data Lake / Storage:** MinIO (S3 Compatible) via biblioteca `boto3`
+<<<<<<< HEAD
 * **Variáveis de Ambiente:** python-dotenv
+=======
+* **Variáveis de Ambiente:** python-dotenv
+>>>>>>> 45d03cd634c76ff14dc48f15aab841bb226af773
