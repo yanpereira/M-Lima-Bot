@@ -1,0 +1,20 @@
+# Ambientes Virtuais
+venv/
+env/
+.venv/
+
+# Segurança e Credenciais (NUNCA SUBIR)
+.env
+sessao_gigatech.json
+
+# Arquivos de Dados e Temporários
+*.csv
+*.xlsx
+*.pdf
+dados_extraidos/
+temp_*/
+
+# Cache do Python
+__pycache__/
+*.pyc
+.pytest_cache/
