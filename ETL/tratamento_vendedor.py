@@ -34,28 +34,28 @@ padrao_linha = re.compile(
 )
 
 def processar_bronze_para_silver():
-    # Define o nome dos arquivos baseado no dia da rodada
+    # Define o nome dos arquivos baseado no dia da rodada (Agora usando .parquet)
     data_hoje = datetime.now().strftime('%Y-%m-%d')
     nome_arquivo_pdf = f"venda_vendedores_{data_hoje}.pdf"
-    nome_arquivo_csv = f"venda_vendedores_{data_hoje}.csv"
+    nome_arquivo_parquet = f"venda_vendedores_{data_hoje}.parquet"
 
     # Define os caminhos nos buckets
     bucket_bronze = 'marialimabronze'
-    bucket_silver = 'marialimasilver' # Usando o bucket silver que vi no seu painel
+    bucket_silver = 'marialimasilver' 
     
     caminho_minio_pdf = f"venda_vendedores/{nome_arquivo_pdf}"
-    caminho_minio_csv = f"venda_vendedores/{nome_arquivo_csv}"
+    caminho_minio_parquet = f"venda_vendedores/{nome_arquivo_parquet}"
     
     # Nomes dos arquivos temporários locais
     caminho_temp_pdf = f"temp_{nome_arquivo_pdf}"
-    caminho_temp_csv = f"temp_{nome_arquivo_csv}"
+    caminho_temp_parquet = f"temp_{nome_arquivo_parquet}"
 
     print(f"📥 1. Baixando o PDF mais recente ({caminho_minio_pdf}) da camada Bronze...")
     try:
         s3_client.download_file(bucket_bronze, caminho_minio_pdf, caminho_temp_pdf)
     except Exception as e:
-        print(f"Erro ao baixar PDF do MinIO: {e}")
-        return # Para a execução se o PDF não for encontrado
+        print(f"❌ Erro ao baixar PDF do MinIO: {e}")
+        return
 
     print("⚙️  2. Extraindo e estruturando os dados do PDF...")
     dados_estruturados = []
@@ -73,46 +73,51 @@ def processar_bronze_para_silver():
                 
                 # Identifica o Vendedor
                 if "Vendedor" in linha and "Supervisor" in linha and "Total" not in linha:
-                    try:
-                        linha_nomes = linhas[i+1].strip()
-                        vendedor_atual = re.split(r'\s{2,}', linha_nomes)[0].strip()
-                    except IndexError:
-                        pass
+                    # Agora o robô olha as próximas 3 linhas para achar o nome, ignorando as vazias
+                    for j in range(1, 4):
+                        try:
+                            prox_linha = linhas[i+j].strip()
+                            # Se a linha tem texto e não é o cabeçalho da tabela, achamos o vendedor!
+                            if prox_linha and "Cliente" not in prox_linha:
+                                vendedor_atual = re.split(r'\s{2,}', prox_linha)[0].strip()
+                                break # Achou o nome, para de descer as linhas
+                        except IndexError:
+                            pass
                     continue
                 
                 # Captura os dados da venda usando o Regex
                 match = padrao_linha.match(linha)
                 if match:
                     dados_estruturados.append({
-                        "Vendedor": vendedor_atual,
-                        "Cliente": match.group(1).strip(),
-                        "Tipo_Venda": match.group(2).strip(),
-                        "Data_Venda": match.group(3).strip(),
-                        "Numero_Venda": match.group(4).strip(),
-                        "Valor_Total": match.group(5).strip(),
-                        "Comissao_Vendedor": match.group(6).strip(),
-                        "Comissao_Supervisor": match.group(7).strip()
+                        "vendedor": vendedor_atual,
+                        "cliente": match.group(1).strip(),
+                        "tipo_venda": match.group(2).strip(),
+                        "data_venda": match.group(3).strip(),
+                        "numero_venda": match.group(4).strip(),
+                        "valor_total": match.group(5).strip(),
+                        "comissao_vendedor": match.group(6).strip(),
+                        "comissao_supervisor": match.group(7).strip()
                     })
 
     df = pd.DataFrame(dados_estruturados)
     print(f"   ✅ {len(df)} linhas estruturadas com sucesso!")
 
-    print("💾 3. Salvando dados estruturados em CSV...")
-    # Salva localmente em CSV (sem o índice da linha e formatado em UTF-8)
-    df.to_csv(caminho_temp_csv, index=False, encoding='utf-8')
+    print("💾 3. Salvando dados estruturados em Parquet...")
+    # Salva localmente em Parquet com engine pyarrow e compressão snappy
+    df.to_parquet(caminho_temp_parquet, engine='pyarrow', index=False, compression='snappy')
 
-    print(f"📤 4. Enviando CSV para a camada Silver no MinIO ({bucket_silver}/{caminho_minio_csv})...")
+    print(f"📤 4. Enviando Parquet para a camada Silver no MinIO ({bucket_silver}/{caminho_minio_parquet})...")
     try:
-        s3_client.upload_file(caminho_temp_csv, bucket_silver, caminho_minio_csv)
+        s3_client.upload_file(caminho_temp_parquet, bucket_silver, caminho_minio_parquet)
         print("🚀 Sucesso absoluto! Pipeline Bronze -> Silver concluído.")
     except Exception as e:
-        print(f"Erro ao fazer upload do CSV: {e}")
+        print(f"❌ Erro ao fazer upload do Parquet: {e}")
 
     print("🧹 5. Limpando arquivos temporários...")
     if os.path.exists(caminho_temp_pdf):
         os.remove(caminho_temp_pdf)
-    if os.path.exists(caminho_temp_csv):
-        os.remove(caminho_temp_csv)
+    if os.path.exists(caminho_temp_parquet):
+        os.remove(caminho_temp_parquet)
     print("✨ Processo finalizado com sucesso!")
 
 if __name__ == "__main__":
