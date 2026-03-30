@@ -34,19 +34,16 @@ padrao_linha = re.compile(
 )
 
 def processar_bronze_para_silver():
-    # Define o nome dos arquivos baseado no dia da rodada
     data_hoje = datetime.now().strftime('%Y-%m-%d')
     nome_arquivo_pdf = f"venda_vendedores_{data_hoje}.pdf"
     nome_arquivo_parquet = f"venda_vendedores_{data_hoje}.parquet"
 
-    # Define os caminhos nos buckets
     bucket_bronze = 'marialimabronze'
     bucket_silver = 'marialimasilver' 
     
     caminho_minio_pdf = f"venda_vendedores/{nome_arquivo_pdf}"
     caminho_minio_parquet = f"venda_vendedores/{nome_arquivo_parquet}"
     
-    # Nomes dos arquivos temporários locais
     caminho_temp_pdf = f"temp_{nome_arquivo_pdf}"
     caminho_temp_parquet = f"temp_{nome_arquivo_parquet}"
 
@@ -59,7 +56,9 @@ def processar_bronze_para_silver():
 
     print("⚙️  2. Extraindo e estruturando os dados do PDF...")
     dados_estruturados = []
+    
     vendedor_atual = "Desconhecido"
+    esperando_vendedor = True  # O robô inicia esperando a primeira vendedora do relatório
 
     with pdfplumber.open(caminho_temp_pdf) as pdf:
         for pagina in pdf.pages:
@@ -67,28 +66,45 @@ def processar_bronze_para_silver():
             if not texto: continue
             
             linhas = texto.split('\n')
-            for i, linha in enumerate(linhas):
-                linha = linha.strip()
-                if not linha: continue
+            for linha in linhas:
+                linha_limpa = linha.strip()
+                if not linha_limpa: continue
                 
-                # Identifica o Vendedor (Com trava para quebra de página)
-                if "Vendedor" in linha and "Supervisor" in linha and "Total" not in linha:
-                    for j in range(1, 4):
-                        try:
-                            prox_linha = linhas[i+j].strip()
-                            if prox_linha and "Cliente" not in prox_linha:
-                                # Trava: Se a próxima linha tem "R$" ou é uma venda, é continuação da página anterior
-                                if "R$" in prox_linha or padrao_linha.match(prox_linha):
-                                    break 
-                                
-                                vendedor_atual = re.split(r'\s{2,}', prox_linha)[0].strip()
-                                break # Achou o nome, para de descer as linhas
-                        except IndexError:
-                            pass
+                linha_upper = linha_limpa.upper()
+                
+                # Bateu no Total? Ativa a captura do próximo vendedor
+                if "TOTAL VENDA:" in linha_upper:
+                    esperando_vendedor = True
                     continue
                 
-                # Captura os dados da venda usando o Regex
-                match = padrao_linha.match(linha)
+                if esperando_vendedor:
+                    linha_compacta = re.sub(r'\s+', ' ', linha_upper).strip()
+                    
+                    # Filtro 1: Ignora cabeçalhos e rodapés do relatório (Agora incluindo SOBRAL)
+                    if any(x in linha_compacta for x in [
+                        "SILVA E AGUIAR", "CNPJ", "BOULEVARD", "SOBRAL", "PERÍODO:", 
+                        "RELATÓRIO", "TOTAL", "MARIA LIMA",
+                        "CLIENTE", "TIPO DATA", "VALOR COMISSÃO"
+                    ]):
+                        continue
+                    
+                    # Filtro 2: Ignora datas e contatos
+                    if re.match(r"^\d{2}/\d{2}/\d{4}$", linha_compacta) or "(88)" in linha_compacta or "@" in linha_compacta:
+                        continue
+                        
+                    # Filtro 3: Ignora cabeçalho da tabela de vendas
+                    if linha_compacta in ["VENDEDOR SUPERVISOR", "VENDEDOR", "SUPERVISOR"]:
+                        continue
+                        
+                    # Captura a vendedora caso a linha não seja uma transação financeira
+                    if not padrao_linha.match(linha_limpa):
+                        vendedor_atual = re.split(r'\s{2,}', linha_limpa)[0].strip()
+                        esperando_vendedor = False
+                        print(f"🕵️ Nova Vendedora Identificada: {vendedor_atual}")
+                        continue
+                
+                # Processamento normal das vendas
+                match = padrao_linha.match(linha_limpa)
                 if match:
                     dados_estruturados.append({
                         "vendedor": vendedor_atual,
@@ -105,7 +121,6 @@ def processar_bronze_para_silver():
     print(f"   ✅ {len(df)} linhas estruturadas com sucesso!")
 
     print("💾 3. Salvando dados estruturados em Parquet...")
-    # Salva localmente em Parquet com engine pyarrow e compressão snappy
     df.to_parquet(caminho_temp_parquet, engine='pyarrow', index=False, compression='snappy')
 
     print(f"📤 4. Enviando Parquet para a camada Silver no MinIO ({bucket_silver}/{caminho_minio_parquet})...")

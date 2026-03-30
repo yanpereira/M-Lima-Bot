@@ -23,6 +23,8 @@ def extrair_e_salvar_vendedor():
         browser = p.chromium.launch(headless=False)
         context = browser.new_context(storage_state="sessao_gigatech.json")
         page = context.new_page()
+        page.set_default_navigation_timeout(120000)
+        page.set_default_timeout(120000)
 
         pdf_container = []
 
@@ -44,8 +46,11 @@ def extrair_e_salvar_vendedor():
         context.on("response", capturar_pdf)
 
         print("Acessando o relatório...")
-        page.goto("https://app.mentorasolucoes.com.br/Voti-1.0.7/relatorios_vendas/frm_rel_vendas_vendedor.xhtml")
-        page.wait_for_load_state("load")
+        page.goto(
+            "https://app.mentorasolucoes.com.br/Voti-1.0.7/relatorios_vendas/frm_rel_vendas_vendedor.xhtml",
+            wait_until="domcontentloaded"
+        )
+        page.locator("text='Imprimir'").wait_for(state="visible")
 
         print("Clicando em Imprimir e aguardando o servidor...")
         

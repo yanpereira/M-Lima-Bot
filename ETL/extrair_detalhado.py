@@ -28,14 +28,20 @@ def extrair_e_salvar_direto():
             accept_downloads=True
         )
         page = context.new_page()
+        page.set_default_navigation_timeout(120000)
+        page.set_default_timeout(120000)
 
         print("Acessando o relatório...")
-        page.goto("https://app.mentorasolucoes.com.br/Voti-1.0.7/relatorios_vendas/frm_rel_venda_detalhada_novo.xhtml")
-        page.wait_for_load_state("networkidle")
+        page.goto(
+            "https://app.mentorasolucoes.com.br/Voti-1.0.7/relatorios_vendas/frm_rel_venda_detalhada_novo.xhtml",
+            wait_until="domcontentloaded"
+        )
 
         print("Aguardando o botão de exportar...")
-        with page.expect_download(timeout=90000) as download_info:
-            page.locator("[id='frmVenda:j_idt175_button']").click()
+        botao_exportar = page.locator("[id='frmVenda:j_idt175_button']")
+        botao_exportar.wait_for(state="visible")
+        with page.expect_download(timeout=120000) as download_info:
+            botao_exportar.click()
         
         # 3. Define o nome do arquivo com a data de hoje (Ex: venda_detalhada_2026-03-06.xlsx)
         data_hoje = datetime.now().strftime('%Y-%m-%d')
