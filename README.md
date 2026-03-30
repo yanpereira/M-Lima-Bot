@@ -23,3 +23,105 @@ O fluxo de dados segue o padrão **Bronze ➔ Silver ➔ Gold**, garantindo rast
 * **Processamento de Dados:** Pandas, PyArrow
 * **Data Lake / Storage:** MinIO (S3 Compatible) via biblioteca `boto3`
 * **Variáveis de Ambiente:** python-dotenv
+
+## ✅ Como rodar
+
+### 1) Configuração
+
+1. Crie o arquivo `.env` a partir do `.env.example` e preencha com as credenciais do GigaTech e do MinIO.
+2. Garanta que os buckets existam no MinIO:
+   - `marialimabronze`
+   - `marialimasilver`
+   - `marialimagold`
+
+### 2) Instalação (Windows)
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m playwright install chromium
+```
+
+### 3) Rodar o pipeline completo (Detalhado + Vendedores)
+
+O arquivo `run_pipeline.py` executa, em sequência:
+- Login (gera/atualiza a sessão)
+- Extração para Bronze (XLSX/PDF)
+- Tratamento para Silver (Parquet)
+- Consolidação para Gold (atualiza os arquivos mestres)
+
+```powershell
+python .\run_pipeline.py
+```
+
+### 4) Rodar por etapa (manual)
+
+```powershell
+python .\ETL\login.py
+
+python .\ETL\extrair_detalhado.py
+python .\ETL\extrair_vendedor.py
+
+python .\ETL\tratamento_detalhado.py
+python .\ETL\tratamento_vendedor.py
+
+python .\ETL\processar_ouro_detalhado.py
+python .\ETL\processar_ouro_vendedor.py
+```
+
+## ℹ️ Observações
+
+- A sessão do Playwright é salva em `sessao_gigatech.json`. Se expirar, rode o `ETL/login.py` novamente.
+- Se algum script falhar no meio, o `run_pipeline.py` interrompe a execução para evitar “seguir em frente” sem a etapa anterior.
+
+## ✅ Como rodar
+
+### 1) Configuração
+
+1. Crie o arquivo `.env` a partir do `.env.example` e preencha com as credenciais do GigaTech e do MinIO.
+2. Garanta que os buckets existam no MinIO:
+   - `marialimabronze`
+   - `marialimasilver`
+   - `marialimagold`
+
+### 2) Instalação (Windows)
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m playwright install chromium
+```
+
+### 3) Rodar o pipeline completo (Detalhado + Vendedores)
+
+O arquivo `run_pipeline.py` executa, em sequência:
+- Login (gera/atualiza a sessão)
+- Extração para Bronze (XLSX/PDF)
+- Tratamento para Silver (Parquet)
+- Consolidação para Gold (atualiza os arquivos mestres)
+
+```powershell
+python .\run_pipeline.py
+```
+
+### 4) Rodar por etapa (manual)
+
+```powershell
+python .\ETL\login.py
+
+python .\ETL\extrair_detalhado.py
+python .\ETL\extrair_vendedor.py
+
+python .\ETL\tratamento_detalhado.py
+python .\ETL\tratamento_vendedor.py
+
+python .\ETL\processar_ouro_detalhado.py
+python .\ETL\processar_ouro_vendedor.py
+```
+
+## ℹ️ Observações
+
+- A sessão do Playwright é salva em `sessao_gigatech.json`. Se expirar, rode o `ETL/login.py` novamente.
+- Se algum script falhar no meio, o `run_pipeline.py` interrompe a execução para evitar “seguir em frente” sem a etapa anterior.

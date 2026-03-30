@@ -34,7 +34,7 @@ padrao_linha = re.compile(
 )
 
 def processar_bronze_para_silver():
-    # Define o nome dos arquivos baseado no dia da rodada (Agora usando .parquet)
+    # Define o nome dos arquivos baseado no dia da rodada
     data_hoje = datetime.now().strftime('%Y-%m-%d')
     nome_arquivo_pdf = f"venda_vendedores_{data_hoje}.pdf"
     nome_arquivo_parquet = f"venda_vendedores_{data_hoje}.parquet"
@@ -71,14 +71,16 @@ def processar_bronze_para_silver():
                 linha = linha.strip()
                 if not linha: continue
                 
-                # Identifica o Vendedor
+                # Identifica o Vendedor (Com trava para quebra de página)
                 if "Vendedor" in linha and "Supervisor" in linha and "Total" not in linha:
-                    # Agora o robô olha as próximas 3 linhas para achar o nome, ignorando as vazias
                     for j in range(1, 4):
                         try:
                             prox_linha = linhas[i+j].strip()
-                            # Se a linha tem texto e não é o cabeçalho da tabela, achamos o vendedor!
                             if prox_linha and "Cliente" not in prox_linha:
+                                # Trava: Se a próxima linha tem "R$" ou é uma venda, é continuação da página anterior
+                                if "R$" in prox_linha or padrao_linha.match(prox_linha):
+                                    break 
+                                
                                 vendedor_atual = re.split(r'\s{2,}', prox_linha)[0].strip()
                                 break # Achou o nome, para de descer as linhas
                         except IndexError:
