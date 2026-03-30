@@ -33,6 +33,12 @@ padrao_linha = re.compile(
     r"(R\$\s*[\d\.,]+)$"
 )
 
+# Extrai o nome do vendedor da linha de cabeçalho: "Vendedor: NOME    Supervisor: OUTRO"
+padrao_vendedor = re.compile(
+    r'Vendedor[:\s]+(.+?)(?:\s{2,}|\s(?=Supervisor))Supervisor',
+    re.IGNORECASE
+)
+
 def processar_bronze_para_silver():
     # Define o nome dos arquivos baseado no dia da rodada (Agora usando .parquet)
     data_hoje = datetime.now().strftime('%Y-%m-%d')
@@ -73,16 +79,19 @@ def processar_bronze_para_silver():
                 
                 # Identifica o Vendedor
                 if "Vendedor" in linha and "Supervisor" in linha and "Total" not in linha:
-                    # Agora o robô olha as próximas 3 linhas para achar o nome, ignorando as vazias
-                    for j in range(1, 4):
-                        try:
-                            prox_linha = linhas[i+j].strip()
-                            # Se a linha tem texto e não é o cabeçalho da tabela, achamos o vendedor!
-                            if prox_linha and "Cliente" not in prox_linha:
-                                vendedor_atual = re.split(r'\s{2,}', prox_linha)[0].strip()
-                                break # Achou o nome, para de descer as linhas
-                        except IndexError:
-                            pass
+                    m_vendedor = padrao_vendedor.search(linha)
+                    if m_vendedor:
+                        vendedor_atual = m_vendedor.group(1).strip()
+                    else:
+                        # Fallback: nome não está na linha atual (layout inesperado)
+                        for j in range(1, 4):
+                            try:
+                                prox_linha = linhas[i+j].strip()
+                                if prox_linha and "Cliente" not in prox_linha:
+                                    vendedor_atual = re.split(r'\s{2,}', prox_linha)[0].strip()
+                                    break
+                            except IndexError:
+                                pass
                     continue
                 
                 # Captura os dados da venda usando o Regex
