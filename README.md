@@ -1,4 +1,4 @@
-# 🤖 Robô Maria Lima - Pipeline ETL & Data Lake
+# 🤖 Robô extrator de dados - Pipeline ETL & Data Lake
 
 Este repositório contém o pipeline automatizado de extração, tratamento e consolidação de dados de vendas do sistema GigaTech. O projeto utiliza **Web Scraping** para extração de relatórios e a **Arquitetura Medalhão (Medallion Architecture)** para processamento e armazenamento em um Data Lake (MinIO).
 
