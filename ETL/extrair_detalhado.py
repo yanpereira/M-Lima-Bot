@@ -38,7 +38,7 @@ def extrair_e_salvar_direto():
         )
 
         print("Aguardando o botão de exportar...")
-        botao_exportar = page.locator("[id='frmVenda:j_idt175_button']")
+        botao_exportar = page.locator("button:has-text('Exportar Xlsx')")
         botao_exportar.wait_for(state="visible")
         with page.expect_download(timeout=120000) as download_info:
             botao_exportar.click()
