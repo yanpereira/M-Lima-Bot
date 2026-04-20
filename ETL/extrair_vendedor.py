@@ -22,31 +22,28 @@ def extrair_e_salvar_vendedor():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(storage_state="sessao_gigatech.json")
-        page = context.new_page()
-        page.set_default_navigation_timeout(120000)
-        page.set_default_timeout(120000)
 
         pdf_container = []
 
-        def capturar_pdf(resposta):
+        # Intercepta todas as requisições antes do browser consumir
+        def handle_route(route):
             try:
-                tipo_conteudo = resposta.headers.get("content-type", "").lower()
-                if "application/pdf" in tipo_conteudo:
-                    print(f"Detectando um PDF trafegando na rede...")
-                    try:
-                        corpo = resposta.body()
-                        print(f"📦 Corpo recebido: {len(corpo)} bytes, início: {corpo[:5]}")
-                        if corpo and len(corpo) > 100:  # ← remove verificação %PDF
-                            pdf_container.append(corpo)
-                            print(f"✅ PDF capturado! ({len(corpo)} bytes)")
-                        else:
-                            print(f"⚠️ Corpo vazio ou muito pequeno")
-                    except Exception as e:
-                        print(f"⚠️ Erro ao ler corpo: {e}")
+                response = route.fetch()
+                body = response.body()
+                content_type = response.headers.get("content-type", "").lower()
+                if "application/pdf" in content_type or (body and body[:4] == b"%PDF"):
+                    print(f"✅ PDF interceptado! ({len(body)} bytes)")
+                    pdf_container.append(body)
+                route.fulfill(response=response)
             except Exception as e:
-                print(f"⚠️ Erro no callback: {e}")
+                print(f"⚠️ Erro no route: {e}")
+                route.continue_()
 
-        context.on("response", capturar_pdf)
+        context.route("**/*", handle_route)
+
+        page = context.new_page()
+        page.set_default_navigation_timeout(120000)
+        page.set_default_timeout(120000)
 
         print("Acessando o relatório...")
         page.goto(
@@ -56,32 +53,22 @@ def extrair_e_salvar_vendedor():
         page.locator("text='Imprimir'").wait_for(state="visible")
 
         print("Clicando em Imprimir e aguardando o servidor...")
-
-        with context.expect_page() as nova_aba_info:
-            page.locator("text='Imprimir'").click()
-
-        nova_aba = nova_aba_info.value
-
-        # Escuta respostas na nova aba também
-        nova_aba.on("response", capturar_pdf)
-
-        # Espera a rede ficar idle em vez de tempo fixo
         try:
+            with context.expect_page() as nova_aba_info:
+                page.locator("text='Imprimir'").click()
+            nova_aba = nova_aba_info.value
             nova_aba.wait_for_load_state("networkidle", timeout=60000)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ {e}")
 
-        # Segunda chance — espera mais 5s se ainda não capturou
-        if not pdf_container:
-            nova_aba.wait_for_timeout(5000)
+        page.wait_for_timeout(5000)
 
         if not pdf_container:
-            print("❌ ERRO: Nenhum PDF passou pela rede.")
+            print("❌ ERRO: Nenhum PDF interceptado.")
             browser.close()
             return
 
         arquivo_pdf_real = pdf_container[0]
-
         data_hoje = datetime.now().strftime('%Y-%m-%d')
         nome_arquivo = f"venda_vendedores_{data_hoje}.pdf"
         caminho_temporario = os.path.join(os.getcwd(), nome_arquivo)
@@ -95,7 +82,7 @@ def extrair_e_salvar_vendedor():
 
         try:
             s3_client.upload_file(caminho_temporario, bucket_name, caminho_minio)
-            print(f"🚀 Sucesso absoluto! PDF validado e salvo na nuvem.")
+            print(f"🚀 Sucesso absoluto! PDF salvo na nuvem.")
         except Exception as e:
             print(f"Erro ao salvar no MinIO: {e}")
 
