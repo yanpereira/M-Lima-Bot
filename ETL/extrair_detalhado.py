@@ -22,7 +22,7 @@ s3_client = boto3.client(
 
 def extrair_e_salvar_direto():
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         context = browser.new_context(
             storage_state="sessao_gigatech.json", 
             accept_downloads=True
