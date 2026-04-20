@@ -32,13 +32,19 @@ def extrair_e_salvar_vendedor():
             try:
                 tipo_conteudo = resposta.headers.get("content-type", "").lower()
                 if "application/pdf" in tipo_conteudo:
-                    print(f"👀 Opa! Detectei um PDF trafegando na rede...")
-                    corpo = resposta.body()
-                    if corpo.startswith(b"%PDF"):
-                        pdf_container.append(corpo)
-                        print(f"✅ PDF capturado! ({len(corpo)} bytes)")
-            except Exception:
-                pass
+                    print(f"Detectando um PDF trafegando na rede...")
+                    try:
+                        corpo = resposta.body()
+                        print(f"📦 Corpo recebido: {len(corpo)} bytes, início: {corpo[:5]}")
+                        if corpo and len(corpo) > 100:  # ← remove verificação %PDF
+                            pdf_container.append(corpo)
+                            print(f"✅ PDF capturado! ({len(corpo)} bytes)")
+                        else:
+                            print(f"⚠️ Corpo vazio ou muito pequeno")
+                    except Exception as e:
+                        print(f"⚠️ Erro ao ler corpo: {e}")
+            except Exception as e:
+                print(f"⚠️ Erro no callback: {e}")
 
         context.on("response", capturar_pdf)
 
