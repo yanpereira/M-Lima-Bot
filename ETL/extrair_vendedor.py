@@ -1,8 +1,12 @@
-from playwright.sync_api import sync_playwright
+import argparse
 import os
-import boto3
 from datetime import datetime
+
+import boto3
 from dotenv import load_dotenv
+from playwright.sync_api import sync_playwright
+
+from utils import prefixo_perfil, sessao_path
 
 load_dotenv()
 
@@ -18,25 +22,25 @@ s3_client = boto3.client(
     region_name='us-east-1'
 )
 
-def extrair_e_salvar_vendedor():
+
+def extrair_e_salvar_vendedor(perfil: str):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(storage_state="sessao_gigatech.json")
+        context = browser.new_context(storage_state=sessao_path(perfil))
 
         pdf_container = []
 
-        # Intercepta todas as requisições antes do browser consumir
         def handle_route(route):
             try:
                 response = route.fetch()
                 body = response.body()
                 content_type = response.headers.get("content-type", "").lower()
                 if "application/pdf" in content_type or (body and body[:4] == b"%PDF"):
-                    print(f"✅ PDF interceptado! ({len(body)} bytes)")
+                    print(f"PDF interceptado! ({len(body)} bytes)")
                     pdf_container.append(body)
                 route.fulfill(response=response)
             except Exception as e:
-                print(f"⚠️ Erro no route: {e}")
+                print(f"Erro no route: {e}")
                 route.continue_()
 
         context.route("**/*", handle_route)
@@ -45,7 +49,7 @@ def extrair_e_salvar_vendedor():
         page.set_default_navigation_timeout(120000)
         page.set_default_timeout(120000)
 
-        print("Acessando o relatório...")
+        print(f"Acessando o relatório ({perfil})...")
         page.goto(
             "https://app.mentorasolucoes.com.br/Voti-1.0.7/relatorios_vendas/frm_rel_vendas_vendedor.xhtml",
             wait_until="domcontentloaded"
@@ -59,12 +63,12 @@ def extrair_e_salvar_vendedor():
             nova_aba = nova_aba_info.value
             nova_aba.wait_for_load_state("networkidle", timeout=60000)
         except Exception as e:
-            print(f"⚠️ {e}")
+            print(f"Aviso: {e}")
 
         page.wait_for_timeout(5000)
 
         if not pdf_container:
-            print("❌ ERRO: Nenhum PDF interceptado.")
+            print("ERRO: Nenhum PDF interceptado.")
             browser.close()
             return
 
@@ -78,11 +82,11 @@ def extrair_e_salvar_vendedor():
 
         print("Iniciando envio para a camada Bronze no MinIO...")
         bucket_name = 'marialimabronze'
-        caminho_minio = f"venda_vendedores/{nome_arquivo}"
+        caminho_minio = f"venda_vendedores/{prefixo_perfil(perfil)}{nome_arquivo}"
 
         try:
             s3_client.upload_file(caminho_temporario, bucket_name, caminho_minio)
-            print(f"🚀 Sucesso absoluto! PDF salvo na nuvem.")
+            print("Sucesso! PDF salvo na nuvem.")
         except Exception as e:
             print(f"Erro ao salvar no MinIO: {e}")
 
@@ -91,5 +95,15 @@ def extrair_e_salvar_vendedor():
 
         browser.close()
 
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--perfil", default="default")
+    args = parser.parse_args()
+
+    extrair_e_salvar_vendedor(args.perfil)
+    return 0
+
+
 if __name__ == "__main__":
-    extrair_e_salvar_vendedor()
+    raise SystemExit(main())

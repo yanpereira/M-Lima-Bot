@@ -1,0 +1,18 @@
+import boto3
+import pandas as pd
+import io
+
+# 1. Conexão com o seu MinIO
+s3_client = boto3.client(
+    's3',
+    endpoint_url='https://elt-minio.xbgiwf.easypanel.host',
+    aws_access_key_id='admin',       # Substitua caso tenha mudado a senha
+    aws_secret_access_key='password',# Substitua caso tenha mudado a senha
+    region_name='us-east-1'
+)
+
+obj_detalhado = s3_client.get_object(Bucket='marialimagold', Key='vendas_detalhada/sobral/master_vendas_detalhada.parquet')
+df_vendas_detalhada = pd.read_parquet(io.BytesIO(obj_detalhado['Body'].read()))
+
+
+print(df_vendas_detalhada.head())

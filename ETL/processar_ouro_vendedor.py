@@ -1,17 +1,18 @@
+import argparse
 import os
 import boto3
 import pandas as pd
 from datetime import datetime
 from dotenv import load_dotenv
 
-# 1. Carrega as variáveis do .env
+from utils import prefixo_perfil
+
 load_dotenv()
 
 MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT')
 MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY')
 MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY')
 
-# 2. Configura a conexão usando a lógica que validamos
 s3_client = boto3.client(
     's3',
     endpoint_url=f'https://{MINIO_ENDPOINT}',
@@ -20,18 +21,15 @@ s3_client = boto3.client(
     region_name='us-east-1'
 )
 
-def processar_ouro_vendedores():
-    # Pega as datas com os tracinhos para o nome do arquivo
+
+def processar_ouro_vendedores(perfil: str):
     data_hoje = datetime.now().strftime('%Y-%m-%d')
-    # Formato de data capturado pelo Regex do PDF (DD/MM/YYYY) para filtrarmos
-    data_filtro_str = datetime.now().strftime('%d/%m/%Y') 
 
     bucket_silver = 'marialimasilver'
     bucket_gold = 'marialimagold' 
 
-    # Caminhos no MinIO (Pasta venda_vendedores)
-    caminho_minio_silver = f"venda_vendedores/venda_vendedores_{data_hoje}.parquet"
-    caminho_minio_master = "venda_vendedores/master_venda_vendedores.parquet"
+    caminho_minio_silver = f"venda_vendedores/{prefixo_perfil(perfil)}venda_vendedores_{data_hoje}.parquet"
+    caminho_minio_master = f"venda_vendedores/{prefixo_perfil(perfil)}master_venda_vendedores.parquet"
 
     # Arquivos temporários (com nomes específicos para não conflitar com o outro script)
     caminho_local_silver = f"temp_silver_vend_{data_hoje}.parquet"
@@ -57,19 +55,17 @@ def processar_ouro_vendedores():
         arquivo_mestre_existe = False
 
     if arquivo_mestre_existe:
-        # Coluna que criamos no script de tratamento da Silver
-        coluna_data = 'data_venda' 
-        
+        coluna_data = 'data_venda'
+
         tamanho_antes = len(df_master)
-        
-        # Converte a coluna para string DD/MM/YYYY de forma segura para comparar
-        datas_como_string = pd.to_datetime(df_master[coluna_data], dayfirst=True, errors='coerce').dt.strftime('%d/%m/%Y')
-        
-        # Remove as linhas do dia de hoje (Garante a Idempotência das parciais)
-        df_master = df_master[datas_como_string != data_filtro_str]
-        
+
+        # Remove do master TODAS as datas presentes no Silver (não apenas hoje),
+        # garantindo idempotência mesmo quando o Silver contém mais de um dia.
+        datas_no_silver = set(df_silver_hoje[coluna_data].astype(str).unique())
+        df_master = df_master[~df_master[coluna_data].astype(str).isin(datas_no_silver)]
+
         linhas_removidas = tamanho_antes - len(df_master)
-        print(f"   🧹 Limpando parciais antigas: {linhas_removidas} linhas de hoje removidas.")
+        print(f"   🧹 Removendo {linhas_removidas} linhas das datas {datas_no_silver} do master.")
 
     print("🔄 3. Consolidando os dados...")
     df_ouro = pd.concat([df_master, df_silver_hoje], ignore_index=True)
@@ -92,5 +88,14 @@ def processar_ouro_vendedores():
         os.remove(caminho_local_master)
     print("✨ Processo finalizado com sucesso!")
 
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--perfil", default="default")
+    args = parser.parse_args()
+
+    processar_ouro_vendedores(args.perfil)
+    return 0
+
+
 if __name__ == "__main__":
-    processar_ouro_vendedores()
+    raise SystemExit(main())

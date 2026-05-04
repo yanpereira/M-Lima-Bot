@@ -5,7 +5,7 @@ env/
 
 # Segurança e Credenciais (NUNCA SUBIR)
 .env
-sessao_gigatech.json
+sessao_gigatech*.json
 
 # Arquivos de Dados e Temporários
 *.csv

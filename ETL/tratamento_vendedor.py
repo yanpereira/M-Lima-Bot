@@ -1,3 +1,4 @@
+import argparse
 import os
 import boto3
 import pdfplumber
@@ -6,14 +7,14 @@ import re
 from datetime import datetime
 from dotenv import load_dotenv
 
-# 1. Carrega as variáveis do seu arquivo .env
+from utils import prefixo_perfil, sanitizar_perfil
+
 load_dotenv()
 
 MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT')
 MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY')
 MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY')
 
-# 2. Configura a conexão com o MinIO
 s3_client = boto3.client(
     's3',
     endpoint_url=f'https://{MINIO_ENDPOINT}',
@@ -33,7 +34,7 @@ padrao_linha = re.compile(
     r"(R\$\s*[\d\.,]+)$"
 )
 
-def processar_bronze_para_silver():
+def processar_bronze_para_silver(perfil: str):
     data_hoje = datetime.now().strftime('%Y-%m-%d')
     nome_arquivo_pdf = f"venda_vendedores_{data_hoje}.pdf"
     nome_arquivo_parquet = f"venda_vendedores_{data_hoje}.parquet"
@@ -41,8 +42,8 @@ def processar_bronze_para_silver():
     bucket_bronze = 'marialimabronze'
     bucket_silver = 'marialimasilver' 
     
-    caminho_minio_pdf = f"venda_vendedores/{nome_arquivo_pdf}"
-    caminho_minio_parquet = f"venda_vendedores/{nome_arquivo_parquet}"
+    caminho_minio_pdf = f"venda_vendedores/{prefixo_perfil(perfil)}{nome_arquivo_pdf}"
+    caminho_minio_parquet = f"venda_vendedores/{prefixo_perfil(perfil)}{nome_arquivo_parquet}"
     
     caminho_temp_pdf = f"temp_{nome_arquivo_pdf}"
     caminho_temp_parquet = f"temp_{nome_arquivo_parquet}"
@@ -118,6 +119,7 @@ def processar_bronze_para_silver():
                     })
 
     df = pd.DataFrame(dados_estruturados)
+    df["filial"] = sanitizar_perfil(perfil)
     print(f"   ✅ {len(df)} linhas estruturadas com sucesso!")
 
     print("💾 3. Salvando dados estruturados em Parquet...")
@@ -137,5 +139,14 @@ def processar_bronze_para_silver():
         os.remove(caminho_temp_parquet)
     print("✨ Processo finalizado com sucesso!")
 
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--perfil", default="default")
+    args = parser.parse_args()
+
+    processar_bronze_para_silver(args.perfil)
+    return 0
+
+
 if __name__ == "__main__":
-    processar_bronze_para_silver()
+    raise SystemExit(main())

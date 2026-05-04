@@ -1,3 +1,4 @@
+import argparse
 import os
 import boto3
 import pandas as pd
@@ -5,14 +6,14 @@ from datetime import datetime
 from dotenv import load_dotenv
 import re
 
-# 1. Carrega as variáveis do seu arquivo .env
+from utils import prefixo_perfil, sanitizar_perfil
+
 load_dotenv()
 
 MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT')
 MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY')
 MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY')
 
-# 2. Configura a conexão com o MinIO
 s3_client = boto3.client(
     's3',
     endpoint_url=f'https://{MINIO_ENDPOINT}',
@@ -20,6 +21,7 @@ s3_client = boto3.client(
     aws_secret_access_key=MINIO_SECRET_KEY,
     region_name='us-east-1'
 )
+
 
 def limpar_nome_colunas(df):
     """Padroniza os nomes das colunas para o formato snake_case"""
@@ -34,8 +36,7 @@ def limpar_nome_colunas(df):
     df.columns = novas_colunas
     return df
 
-def processar_bronze_para_silver_detalhado():
-    # Define os nomes dos arquivos baseado no dia da rodada
+def processar_bronze_para_silver_detalhado(perfil: str):
     data_hoje = datetime.now().strftime('%Y-%m-%d')
     nome_arquivo_xlsx = f"venda_detalhada_{data_hoje}.xlsx"
     nome_arquivo_parquet = f"venda_detalhada_{data_hoje}.parquet"
@@ -44,8 +45,8 @@ def processar_bronze_para_silver_detalhado():
     bucket_bronze = 'marialimabronze'
     bucket_silver = 'marialimasilver'
     
-    caminho_minio_xlsx = f"venda_detalhado/{nome_arquivo_xlsx}"
-    caminho_minio_parquet = f"venda_detalhado/{nome_arquivo_parquet}"
+    caminho_minio_xlsx = f"venda_detalhado/{prefixo_perfil(perfil)}{nome_arquivo_xlsx}"
+    caminho_minio_parquet = f"venda_detalhado/{prefixo_perfil(perfil)}{nome_arquivo_parquet}"
     
     # Nomes dos arquivos temporários locais
     caminho_temp_xlsx = f"temp_{nome_arquivo_xlsx}"
@@ -62,8 +63,8 @@ def processar_bronze_para_silver_detalhado():
     # Lê o Excel usando o motor openpyxl
     df = pd.read_excel(caminho_temp_xlsx, engine='xlrd')
     
-    # Padroniza os nomes das colunas para facilitar consultas analíticas
     df = limpar_nome_colunas(df)
+    df["filial"] = sanitizar_perfil(perfil)
     print(f"   ✅ {len(df)} linhas lidas com sucesso. Colunas padronizadas.")
 
     print("💾 3. Convertendo e salvando em formato Parquet...")
@@ -84,5 +85,14 @@ def processar_bronze_para_silver_detalhado():
         os.remove(caminho_temp_parquet)
     print("✨ Processo finalizado com sucesso!")
 
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--perfil", default="default")
+    args = parser.parse_args()
+
+    processar_bronze_para_silver_detalhado(args.perfil)
+    return 0
+
+
 if __name__ == "__main__":
-    processar_bronze_para_silver_detalhado()
+    raise SystemExit(main())
